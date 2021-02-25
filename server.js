@@ -1,66 +1,76 @@
-const express = require("express");
-const fs = require("fs");
-const uuid = require("uuid");
-const app = express();
-const PORT = process.env.PORT || 3001;
-const db = require("./db/db.json")
-const path = require("path");
+const express= require("express");
+const path= require("path"); 
+const fs= require("fs");
 
+//set up express and create port
+const app= express();
+const PORT= process.env.PORT || 8080;
+
+app.use(express.static(path.join(__dirname, "/public")));
 app.use(express.urlencoded({ extended: true }));
 app.use(express.json());
 
-app.use(express.static(path.join(__dirname, "public")));
+//pull and parse json file data, if array exists, assign id's to each note
+let savedNotes= fs.readFileSync(path.join(__dirname, "/db/db.json"));
+savedNotes= JSON.parse(savedNotes);
+if (savedNotes.length > 0) {
+for (let i = 0; i < savedNotes.length; i++) {
+    savedNotes[i].id = (i + 1);
+}
+    } else {
+        savedNotes = []; //create empty array if json file was blank
+    }
 
-//joins the /notes route with the notes.html page
-app.get("/notes", function (req, res) {
-  res.sendFile(path.join(__dirname, "public/notes.html"));
+
+//create routes to files
+app.get("/notes", (req, res) => {
+    res.sendFile(path.join(__dirname, "public/notes.html"));
 });
 
-//gets all notes
-app.get("/api/notes", function (req, res) {
-  const all = fs.readFileSync(path.join(__dirname, "db/db.json"));
-  const notes = JSON.parse(all);
-  console.log(all);
-  return res.json(notes);
+app.get("/api/notes", (req,res) => {
+    res.sendFile(path.join(__dirname, "/db/db.json"));
 });
 
-//if any other route is accessed, direct client to the index.html page
-app.get("*", function (req, res) {
-  res.sendFile(path.join(__dirname, "public/index.html"));
+app.post("/api/notes", (req,res) => {
+var newNote= req.body;
+if (savedNotes.length < 1) {
+    newNote.id = 1;
+    savedNotes.push(newNote);
+} else {
+    var lastIndex= (savedNotes.length - 1); //if array exists assign id based on id of last indexed item in array
+    newNote.id = (savedNotes[lastIndex].id + 1);
+    console.log(newNote);
+    savedNotes.push(newNote);
+}
+fs.writeFileSync(__dirname + "/db/db.json", JSON.stringify(savedNotes), (err) => //rewrite file using our savedNotes array
+err ? console.error(err) : console.log("success!"));
+res.sendFile(path.join(__dirname, "public/notes.html")); //display changes without refreshing
 });
 
-//allows user to create a new note
-app.post("/api/notes", function (req, res) {
-  const newNote = {
-    id: uuid.v4(),
-    title: req.body.title,
-    text: req.body.text
-  }
-  console.log(newNote);
+//delete note based on id, reset all remaining id's 
+app.delete("/api/notes/:id", (req, res) => {
+var selectedId= req.params.id;
+console.log(selectedId);
+for (let i = 0; i < savedNotes.length; i++) {
+    if (selectedId == savedNotes[i].id) {
+        savedNotes.splice(i, 1);
+    }
+}
+for (let i = 0; i < savedNotes.length; i++) {
+    savedNotes[i].id = (i + 1);
+}
+fs.writeFileSync(__dirname + "/db/db.json", JSON.stringify(savedNotes), (err) => 
+err ? console.error(err) : console.log("success!"));
+res.sendFile(path.join(__dirname, "public/notes.html")); //display changes without refreshing
+});
 
-  //pushing newNote object containing unique item ID, title and body content to the db.json file
-  db.push(newNote);
+app.get("*", (req, res) => {
+    res.sendFile(path.join(__dirname, "public/index.html"));
+});
 
-  fs.writeFile("db/db.json", JSON.stringify(db), function (err) {
-    err ? console.log(err) : console.log('Success!')
-    res.json(newNote);
+
+
+//open server to request
+app.listen(PORT, function() {
+    console.log("Server listening on: http://localhost:" + PORT);
   });
-});
-
-//deletes a note
-app.delete("/api/notes/:id", function (req, res) {
-  const found = req.params.id;
-  console.log(found);
-
-  var newNote1 = db.filter((note) => note.id != found);
-  console.log(newNote1);
-  fs.writeFile("db/db.json", JSON.stringify(newNote1), function (err) {
-    err ? console.log(err) : console.log('Success!')
-    //displaying on the screen as JSON with all notes except the one deleted through req.params.id
-    res.json(newNote1);
-  });
-});
-
-app.listen(PORT, function () {
-  console.log("App listening on PORT " + PORT);
-});
